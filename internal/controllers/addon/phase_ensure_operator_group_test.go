@@ -247,39 +247,13 @@ func TestEnsureOperatorGroup(t *testing.T) {
 
 func TestReconcileOperatorGroup_Adoption(t *testing.T) {
 	for name, tc := range map[string]struct {
-		MustAdopt  bool
-		Strategy   addonsv1alpha1.ResourceAdoptionStrategyType
-		AssertFunc func(*testing.T, error)
+		OwnedByAddon bool
 	}{
-		"no strategy/no adoption": {
-			MustAdopt:  false,
-			Strategy:   addonsv1alpha1.ResourceAdoptionStrategyType(""),
-			AssertFunc: assertReconciledOperatorGroup,
+		"Already owned by addon": {
+			OwnedByAddon: false,
 		},
-		"Prevent/no adoption": {
-			MustAdopt:  false,
-			Strategy:   addonsv1alpha1.ResourceAdoptionPrevent,
-			AssertFunc: assertReconciledOperatorGroup,
-		},
-		"AdoptAll/no adoption": {
-			MustAdopt:  false,
-			Strategy:   addonsv1alpha1.ResourceAdoptionAdoptAll,
-			AssertFunc: assertReconciledOperatorGroup,
-		},
-		"no strategy/must adopt": {
-			MustAdopt:  true,
-			Strategy:   addonsv1alpha1.ResourceAdoptionStrategyType(""),
-			AssertFunc: assertUnreconciledOperatorGroup,
-		},
-		"Prevent/must adopt": {
-			MustAdopt:  true,
-			Strategy:   addonsv1alpha1.ResourceAdoptionPrevent,
-			AssertFunc: assertUnreconciledOperatorGroup,
-		},
-		"AdoptAll/must adopt": {
-			MustAdopt:  true,
-			Strategy:   addonsv1alpha1.ResourceAdoptionAdoptAll,
-			AssertFunc: assertReconciledOperatorGroup,
+		"Not already owned by addon": {
+			OwnedByAddon: true,
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -293,24 +267,22 @@ func TestReconcileOperatorGroup_Adoption(t *testing.T) {
 			).Run(func(args mock.Arguments) {
 				var og *operatorsv1.OperatorGroup
 
-				if tc.MustAdopt {
-					og = testutil.NewTestOperatorGroupWithoutOwner()
-				} else {
+				if tc.OwnedByAddon {
 					og = testutil.NewTestOperatorGroup()
 					// Unrelated spec change to force reconciliation
 					og.Spec.StaticProvidedAPIs = true
+				} else {
+					og = testutil.NewTestOperatorGroupWithoutOwner()
 				}
 
 				og.DeepCopyInto(args.Get(2).(*operatorsv1.OperatorGroup))
 			}).Return(nil)
 
-			if !tc.MustAdopt || (tc.MustAdopt && tc.Strategy == addonsv1alpha1.ResourceAdoptionAdoptAll) {
-				c.On("Update",
-					testutil.IsContext,
-					testutil.IsOperatorsV1OperatorGroupPtr,
-					mock.Anything,
-				).Return(nil)
-			}
+			c.On("Update",
+				testutil.IsContext,
+				testutil.IsOperatorsV1OperatorGroupPtr,
+				mock.Anything,
+			).Return(nil)
 
 			rec := &olmReconciler{
 				client: c,
@@ -318,23 +290,10 @@ func TestReconcileOperatorGroup_Adoption(t *testing.T) {
 			}
 
 			ctx := context.Background()
-			err := rec.reconcileOperatorGroup(ctx, operatorGroup.DeepCopy(), tc.Strategy)
+			err := rec.reconcileOperatorGroup(ctx, operatorGroup.DeepCopy())
 
-			tc.AssertFunc(t, err)
+			assert.NoError(t, err)
 			c.AssertExpectations(t)
 		})
 	}
-}
-
-func assertReconciledOperatorGroup(t *testing.T, err error) {
-	t.Helper()
-
-	assert.NoError(t, err)
-}
-
-func assertUnreconciledOperatorGroup(t *testing.T, err error) {
-	t.Helper()
-
-	assert.Error(t, err)
-	assert.EqualError(t, err, controllers.ErrNotOwnedByUs.Error())
 }
