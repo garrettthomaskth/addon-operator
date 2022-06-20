@@ -45,6 +45,12 @@ func (r *olmReconciler) ensureOperatorGroup(
 
 // Reconciles the Spec of the given OperatorGroup if needed by updating or creating the OperatorGroup.
 // The given OperatorGroup is updated to reflect the latest state from the kube-apiserver.
+
+// TODO: func (r *olmReconciler) reconcileObject(
+// 	ctx context.Context, object client.Object,
+// ) {
+// 	object.GetLabels()
+// }
 func (r *olmReconciler) reconcileOperatorGroup(
 	ctx context.Context, operatorGroup *operatorsv1.OperatorGroup, strategy addonsv1alpha1.ResourceAdoptionStrategyType) error {
 	currentOperatorGroup := &operatorsv1.OperatorGroup{}
